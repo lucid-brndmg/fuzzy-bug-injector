@@ -1028,3 +1028,10 @@ MUTATIONS: list[Mutation] = [
     RenamePartial(),
     InconsistentLiteral(),
 ]
+
+# todo: swap-bitwise: <<, >>, &, |, ^
+# string-literal-cases: lower / upper, including char
+# swap-mod-div
+# swap ..= and .. (rust)
+# swap-fn-names: sin, cos, tan, atan, ...
+# swap-some-literals: 180, 360, etc

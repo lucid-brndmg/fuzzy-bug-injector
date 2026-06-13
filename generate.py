@@ -21,19 +21,16 @@ def default_sampler(
     candidates: list[tuple[str, MutationMatch]],
     min_mut: int,
     max_mut: int,
-    iter_limit: int
 ) -> Generator[list[tuple[str, MutationMatch]], Any, None]:
     random.shuffle(candidates)
-    return iter_disjoint_subsets(candidates, check_disjoint, min_mut, max_mut, iter_limit)
+    return iter_disjoint_subsets(candidates, check_disjoint, min_mut, max_mut, 2**32)
 
 def generate_multi(
     id: str, src: str, lang: str,
     mutations: list[Mutation],
     validator_script: str | None,
     min_mut = 1, max_mut = 5,
-    iter_limit = 1024,
     variation_limit = 3,
-
     sampler = default_sampler
 ):
     lines_find = src.splitlines()
@@ -45,7 +42,7 @@ def generate_multi(
         for match in matches:
             candidates.append((mutation.name, match))
     print(f"found {len(candidates)} candidates for id {id}")
-    disjoint_subsets = sampler(candidates, min_mut, max_mut, iter_limit)
+    disjoint_subsets = sampler(candidates, min_mut, max_mut)
     out = []
     for i, var in enumerate(disjoint_subsets):
         if len(out) >= variation_limit:
@@ -84,7 +81,6 @@ def main():
     parser.add_argument("--output", default="out.json", help="The output dataset file")
     parser.add_argument("--min-matches", type=int, default=1, help="Minimum number of places to mutate")
     parser.add_argument("--max-matches", type=int, default=5, help="Maximum number of places to mutate")
-    parser.add_argument("--max-iters", type=int, default=2**16, help="Maximum iterations for selecting the combinations of matches")
     parser.add_argument("--max-variations", type=int, default=10, help="Maximum number of variations to generate for a source code")
     parser.add_argument("--validator", help="A validator script for checking validity of each variation")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
@@ -158,7 +154,6 @@ def main():
             args.validator,
             args.min_matches,
             args.max_matches,
-            args.max_iters,
             args.max_variations,
             sampler
         )
