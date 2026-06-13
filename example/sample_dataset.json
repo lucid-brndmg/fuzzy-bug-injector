@@ -1,0 +1,13 @@
+[
+  {
+    "id": "task-113-2",
+    "mbpp_id": "113",
+    "code": "\nfn check_integer(text: &str) -> Option<bool> {\n    let text = text.trim();\n    if text.is_empty() {\n        return None;\n    }\n\n    if text.chars().all(|ch| ch.is_ascii_digit()) {\n        return Some(true);\n    }\n\n    let mut chars = text.chars();\n    if let Some(first) = chars.next() {\n        if (first == '+' || first == '-') && chars.clone().count() > 0 && chars.all(|ch| ch.is_ascii_digit()) {\n            return Some(true);\n        }\n    }\n    Some(false)\n}\n",
+    "problem": "Write a function to check if a string represents an integer or not.",
+    "tests": [
+      "\nassert_eq!(check_integer(\"python\"), Some(false));\n",
+      "\nassert_eq!(check_integer(\"1\"), Some(true));\n",
+      "\nassert_eq!(check_integer(\"12345\"), Some(true));\n"
+    ]
+  }
+]
