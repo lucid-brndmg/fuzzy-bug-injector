@@ -3,6 +3,7 @@
 import re
 
 from common.mutation import Mutation, MutationMatch
+from mutations.utils import GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, swap_random
 
 class UnwrapToQuestionMark(Mutation):
     """Remove `.unwrap()` calls, forcing the model to add them back.
@@ -150,19 +151,106 @@ class SwapMatchArms(Mutation):
             i += 1
         return matches
 
-# btree-to-hashmap
-# swap-next-last (iterator)
+class BTreeToHash(Mutation):
+    def __init__(self):
+        super().__init__(
+            name="btree-to-hash",
+            category="multi-line",
+            description_template="Replaces BTree(Map|Set) into Hash(Map|Set).",
+            fix_hint="Replace back.",
+        )
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        matches = []
+        for suff in ["Map", "Set"]:
+            use_bt_stmt = [i for i, s in enumerate(lines) if f"collections::BTree{suff}" in s]
+            if use_bt_stmt == []:
+                return []
+            use_bt_idx = use_bt_stmt[0]
+            use_hs_stmt = [i for i, s in enumerate(lines) if f"use std::collections::Hash{suff}" in s]
+            repl = "" if use_hs_stmt != [] else f"use std::collections::Hash{suff}"
+            sites = []
+    
+            for i, line in enumerate(lines):
+                s = line.rstrip()
+                t = s
+                if i == use_bt_idx:
+                    continue
+                if f"BTree{suff}" in line:
+                    t = t.replace(f"BTree{suff}", f"Hash{suff}")
+                    sites.append((i + 1, s, t))
+    
+            m = MutationMatch(use_bt_idx + 1, lines[use_bt_idx], repl, 0)
+            m.extra_sites = sites
+            matches.append(m)
+        return matches
+
+class SwapRange(Mutation):
+    def __init__(self):
+        super().__init__(
+            name="swap-range",
+            category="multi-line",
+            description_template="Swaps the range operators.",
+            fix_hint="Replace back.",
+        )
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        swaps = [
+            ("..", ["..="]),
+            ("..=", [".."])
+        ]
+        return [
+            m for m in swap_random(lines, swaps, GENERAL_SYMBOL_PATTERN)
+            if not is_comment(m.original)
+        ]
+
+class ConfuseCollectionOperations(Mutation):
+    SWAPS = [
+        ("prod", ["sum"]),
+
+        ("skip", ["take", "step_by"]),
+        ("take", ["skip", "step_by"]),
+        ("step_by", ["skip", "take"]),
+        
+        ("filter", ["take_while", "skip_while"]),
+        ("take_while", ["filter", "skip_while"]),
+        ("skip_while", ["take_while", "filter"]),
+        
+        ("find", ["rposition"]),
+        ("rposition", ["find"]),
+
+        ("any", ["all"]),
+        ("all", ["any"]),
+        ("min_by", ["max_by"]),
+        ("max_by", ["min_by"]),
+        ("min_by_key", ["max_by_key"]),
+        ("max_by_key", ["min_by_key"]),
+        ("first", ["last"]),
+        ("last", ["next"]),
+
+        # not interested in reverse vs clear
+    ]
+
+    def __init__(self):
+        super().__init__(
+            name="confuse-collection-operations",
+            category="single-line",
+            description_template="Swaps collection operations.",
+            fix_hint="Swap back.",
+        )
+
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ]
+
 # iter-skip-k (iter().skip(2)) (1 <= k <= 3)
 # swap-min-max (more than iterator, and also min_by vs max_by)
 # iter-append/remove-rev (iter().rev())
-# len() to len() - 1
-# first -> last (one way)
-# swap all-any
-# nth -> nth(i + 1)
+# todo: apply use std::cmp::*; to every rust file
 
 MUTATIONS: list[Mutation] = [
     UnwrapToQuestionMark(),
     FlipMutability(),
     RemovePub(),
     SwapMatchArms(),
+    BTreeToHash(),
+    SwapRange(),
+    ConfuseCollectionOperations()
 ]

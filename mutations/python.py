@@ -1,5 +1,6 @@
 import re
 from common.mutation import Mutation, MutationMatch
+from mutations.utils import is_comment
 
 class IndentBlock(Mutation):
     """Shift indentation of a block by one level (4 spaces).
@@ -320,9 +321,46 @@ class SwapMethods(Mutation):
         )
 
 
+
+class RemoveNegationPython(Mutation):
+    _NOT_PATTERN = re.compile(r"\bnot\s+")
+
+    def __init__(self):
+        super().__init__(
+            name="remove-negation-python",
+            category="single-line",
+            description_template="A logical negation was accidentally removed. `{mutated}` is missing a `not`.",
+            fix_hint="A `not` operator was removed from a boolean expression.",
+        )
+
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        matches = []
+        for i, line in enumerate(lines):
+            stripped = line.rstrip()
+            if is_comment(stripped):
+                continue
+            indent = len(line) - len(line.lstrip())
+            for m in self._NOT_PATTERN.finditer(stripped):
+                before = stripped[: m.start()]
+                after_not = stripped[m.end() :]
+                # Skip 'is not'
+                if before.endswith("is "):
+                    continue
+                # Skip 'not in'
+                if re.match(r"in\b", after_not):
+                    continue
+                mutated = before + after_not
+                matches.append(MutationMatch(i + 1, stripped, mutated, indent))
+                break
+        return matches
+
+
 MUTATIONS: list[Mutation] = [
     IndentBlock(),
     UnwrapBlock(),
     SwapIfElse(),
-    SwapMethods()
+    SwapMethods(),
+    RemoveNegationPython()
 ]
+
+# todo: elif -> if

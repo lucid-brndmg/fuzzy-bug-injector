@@ -11,7 +11,7 @@ kind of bug introduced. The edit difficulty matrix:
 import re
 from common.mutation import Mutation, MutationMatch
 
-
+from mutations.utils import is_comment, swap_first
 # ── Single-site, single-line mutations ────────────────────────────────
 
 
@@ -32,50 +32,14 @@ class SwapComparison(Mutation):
         )
 
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
-        matches = []
-        for i, line in enumerate(lines):
-            stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
-                continue
-            # Skip Rust generics/lifetimes: <'a, T>, <T: Clone>
-            if re.search(r"<['\w]", stripped) and "=>" not in stripped:
-                continue
-            for old, new in self.SWAPS:
-                if old in stripped and "=>" not in stripped and "->" not in stripped:
-                    indent = len(line) - len(line.lstrip())
-                    matches.append(MutationMatch(i + 1, stripped, stripped.replace(old, new, 1), indent))
-                    break
-        return matches
-
-class ConfuseComparison(Mutation):
-    SWAPS = [
-        ("<= ", "< "), 
-        (">= ", "> "), 
-        ("< ", "<= "), 
-        ("> ", ">= ")
-    ]
-    def __init__(self):
-        super().__init__(
-            name="confuse-comparison",
-            category="single-line",
-            description_template="A comparison operator has been swapped. `{mutated}` uses the wrong comparison direction.",
-            fix_hint="Check the comparison operator direction.",
-        )
-    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
-        matches = []
-        for i, line in enumerate(lines):
-            stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
-                continue
-            # Skip Rust generics/lifetimes: <'a, T>, <T: Clone>
-            if re.search(r"<['\w]", stripped) and "=>" not in stripped:
-                continue
-            for old, new in self.SWAPS:
-                if old in stripped and "=>" not in stripped and "->" not in stripped:
-                    indent = len(line) - len(line.lstrip())
-                    matches.append(MutationMatch(i + 1, stripped, stripped.replace(old, new, 1), indent))
-                    break
-        return matches
+        return [
+            m 
+            for m in swap_first(lines, self.SWAPS)
+            if "=>" not in m.original 
+            and "->" not in m.original 
+            and not is_comment(m.original)
+            and not (re.search(r"<['\w]", m.original) and "=>" not in m.original)
+        ]
 
 class SwapEquality(Mutation):
     def __init__(self):
@@ -90,7 +54,7 @@ class SwapEquality(Mutation):
         matches = []
         for i, line in enumerate(lines):
             stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
+            if is_comment(stripped):
                 continue
             indent = len(line) - len(line.lstrip())
             # Check strict equality first (TypeScript/JS) to avoid partial match
@@ -118,7 +82,7 @@ class FlipBoolean(Mutation):
         matches = []
         for i, line in enumerate(lines):
             stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
+            if is_comment(stripped):
                 continue
             indent = len(line) - len(line.lstrip())
             if "True" in stripped:
@@ -145,7 +109,7 @@ class SwapLogical(Mutation):
         matches = []
         for i, line in enumerate(lines):
             stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
+            if is_comment(stripped):
                 continue
             indent = len(line) - len(line.lstrip())
             if " and " in stripped:
@@ -156,39 +120,6 @@ class SwapLogical(Mutation):
                 matches.append(MutationMatch(i + 1, stripped, stripped.replace(" && ", " || ", 1), indent))
             elif " || " in stripped:
                 matches.append(MutationMatch(i + 1, stripped, stripped.replace(" || ", " && ", 1), indent))
-        return matches
-
-
-class RemoveNegation(Mutation):
-    _NOT_PATTERN = re.compile(r"\bnot\s+")
-
-    def __init__(self):
-        super().__init__(
-            name="remove-negation",
-            category="single-line",
-            description_template="A logical negation was accidentally removed. `{mutated}` is missing a `not`.",
-            fix_hint="A `not` operator was removed from a boolean expression.",
-        )
-
-    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
-        matches = []
-        for i, line in enumerate(lines):
-            stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
-                continue
-            indent = len(line) - len(line.lstrip())
-            for m in self._NOT_PATTERN.finditer(stripped):
-                before = stripped[: m.start()]
-                after_not = stripped[m.end() :]
-                # Skip 'is not'
-                if before.endswith("is "):
-                    continue
-                # Skip 'not in'
-                if re.match(r"in\b", after_not):
-                    continue
-                mutated = before + after_not
-                matches.append(MutationMatch(i + 1, stripped, mutated, indent))
-                break
         return matches
 
 
@@ -205,7 +136,7 @@ class OffByOne(Mutation):
         matches = []
         for i, line in enumerate(lines):
             stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
+            if is_comment(stripped):
                 continue
             indent = len(line) - len(line.lstrip())
             for m in re.finditer(r"(?<![.\w])(\d+)(?![.\w])", stripped):
@@ -213,12 +144,19 @@ class OffByOne(Mutation):
                 if 2 <= val <= 100:
                     mutated = stripped[: m.start(1)] + str(val + 1) + stripped[m.end(1) :]
                     matches.append(MutationMatch(i + 1, stripped, mutated, indent))
+                    mutated = stripped[: m.start(1)] + str(val - 1) + stripped[m.end(1) :]
+                    matches.append(MutationMatch(i + 1, stripped, mutated, indent))
                     break
         return matches
 
 
 class SwapArithmetic(Mutation):
-    SWAPS = [(" + ", " - "), (" - ", " + "), (" * ", " / "), (" / ", " * ")]
+    SWAPS = [
+        (" + ", " - "), 
+        (" - ", " + "), 
+        (" * ", " / "), 
+        (" / ", " * ")
+    ]
 
     def __init__(self):
         super().__init__(
@@ -234,7 +172,7 @@ class SwapArithmetic(Mutation):
             stripped = line.rstrip()
             content = stripped.lstrip()
             # Skip comment lines and import lines
-            if content.startswith(("#", "//", "import ", "from ")):
+            if is_comment(content) or content.startswith(("import ", "from ")):
                 continue
             indent = len(line) - len(line.lstrip())
             for old, new in self.SWAPS:
@@ -261,7 +199,6 @@ class SwapArithmetic(Mutation):
                 break
         return matches
 
-
 class SwapArgs(Mutation):
     def __init__(self):
         super().__init__(
@@ -276,7 +213,7 @@ class SwapArgs(Mutation):
         pattern = re.compile(r"(\w+)\((\w+),\s*(\w+)\)")
         for i, line in enumerate(lines):
             stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
+            if is_comment(stripped):
                 continue
             indent = len(line) - len(line.lstrip())
             m = pattern.search(stripped)
@@ -298,17 +235,11 @@ class SwapAugmentedAssign(Mutation):
         )
 
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
-        matches = []
-        for i, line in enumerate(lines):
-            stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
-                continue
-            for old, new in self.SWAPS:
-                if old in stripped:
-                    indent = len(line) - len(line.lstrip())
-                    matches.append(MutationMatch(i + 1, stripped, stripped.replace(old, new, 1), indent))
-                    break
-        return matches
+        return [
+            m 
+            for m in swap_first(lines, self.SWAPS)
+            if not is_comment(m.original)
+        ]
 
 
 class UnicodeHyphen(Mutation):
@@ -333,7 +264,7 @@ class UnicodeHyphen(Mutation):
         matches = []
         for i, line in enumerate(lines):
             stripped = line.rstrip()
-            if stripped.lstrip().startswith(("#", "//")):
+            if is_comment(stripped):
                 continue
             indent = len(line) - len(line.lstrip())
             for pattern in (self._DQ, self._SQ):
@@ -533,8 +464,6 @@ class DuplicateLineFlip(Mutation):
         return matches
 
 # ── Single-site, multi-line mutations ─────────────────────────────────
-
-
 
 
 class SwapAdjacentLines(Mutation):
@@ -1009,11 +938,9 @@ class InconsistentLiteral(Mutation):
 MUTATIONS: list[Mutation] = [
     # Single-site, single-line (universal)
     SwapComparison(),
-    ConfuseComparison(),
     SwapEquality(),
     FlipBoolean(),
     SwapLogical(),
-    RemoveNegation(),
     OffByOne(),
     SwapArithmetic(),
     SwapArgs(),
@@ -1027,11 +954,5 @@ MUTATIONS: list[Mutation] = [
     # Multi-site (universal)
     RenamePartial(),
     InconsistentLiteral(),
-]
 
-# todo: swap-bitwise: <<, >>, &, |, ^
-# string-literal-cases: lower / upper, including char
-# swap-mod-div
-# swap ..= and .. (rust)
-# swap-fn-names: sin, cos, tan, atan, ...
-# swap-some-literals: 180, 360, etc
+]

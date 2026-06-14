@@ -40,7 +40,19 @@ def generate_multi(
     for mutation in mutations:
         matches = mutation.find_candidates(lines_find, lang=lang)
         for match in matches:
+            if validator_script is not None:
+                code = "".join(apply_mutations(lines_apply, [match]))
+                proc = subprocess.run([
+                    validator_script, 
+                    "--language", lang, 
+                    "--pre-validate",
+                    "--mutations", mutation.name,
+                    "--code", code
+                ])
+                if proc.returncode != 0:
+                    continue
             candidates.append((mutation.name, match))
+
     print(f"found {len(candidates)} candidates for id {id}")
     disjoint_subsets = sampler(candidates, min_mut, max_mut)
     out = []
@@ -75,7 +87,8 @@ def generate_multi(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Apply mutations to souce code files")
+    print("Fuzzy Bug Injector (github.com/lucid-brndmg/fuzzy-bug-injector)")
+    parser = argparse.ArgumentParser(description="Apply mutations to source code files")
     
     parser.add_argument("--dataset", required=True, help="A valid JSON dataset file")
     parser.add_argument("--output", default="out.json", help="The output dataset file")

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from common.utils import is_disjoint_intervals, power_set
+from common.utils import is_disjoint_intervals
 
 @dataclass
 class MutationMatch:
