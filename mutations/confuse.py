@@ -255,8 +255,8 @@ class RemoveElseIf(Mutation):
             if found == []:
                 continue
             f = random.choice(found)
-            pref = stripped[: f.start(1)]
-            suff = stripped[f.end(1) :]
+            pref = stripped[: f.start(0)]
+            suff = stripped[f.end(0) :]
             matches.append(MutationMatch(i + 1, stripped, pref + "if" + suff, indent))
         return matches
 

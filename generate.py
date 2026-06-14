@@ -23,7 +23,7 @@ def default_sampler(
     max_mut: int,
 ) -> Generator[list[tuple[str, MutationMatch]], Any, None]:
     random.shuffle(candidates)
-    return iter_disjoint_subsets(candidates, check_disjoint, min_mut, max_mut, 2**32)
+    yield from iter_disjoint_subsets(candidates, check_disjoint, min_mut, max_mut, 2**32)
 
 def generate_multi(
     id: str, src: str, lang: str,
@@ -44,10 +44,11 @@ def generate_multi(
                 code = "".join(apply_mutations(lines_apply, [match]))
                 proc = subprocess.run([
                     validator_script, 
+                    "--code", code,
                     "--language", lang, 
                     "--pre-validate",
-                    "--mutations", mutation.name,
-                    "--code", code
+                    "--id", id,
+                    "--mutations", mutation.name
                 ])
                 if proc.returncode != 0:
                     continue
@@ -57,6 +58,7 @@ def generate_multi(
     disjoint_subsets = sampler(candidates, min_mut, max_mut)
     out = []
     for i, var in enumerate(disjoint_subsets):
+        print(f"iteration {i}")
         if len(out) >= variation_limit:
             print("variation limit reached")
             break
@@ -69,10 +71,10 @@ def generate_multi(
         if validator_script is not None:
             proc = subprocess.run([
                 validator_script, 
+                "--code", code,
                 "--language", lang, 
                 "--id", var_id,
-                "--mutations", ",".join(names),
-                "--code", code
+                "--mutations", ",".join(names)
             ])
             if proc.returncode != 0:
                 continue

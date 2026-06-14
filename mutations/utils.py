@@ -53,7 +53,7 @@ def swap_random(
     replacement_ratio = 0.5
 ) -> list[MutationMatch]:
     matches = []
-    for i, line in enumerate(lines):
+    for line_idx, line in enumerate(lines):
         s = line.rstrip()
         indent = len(line) - len(line.lstrip())
         replacement = {}
@@ -75,6 +75,6 @@ def swap_random(
                 replacement[i] = random.choice(news)
         toks = [ t if i not in replacement else replacement[i] for i, t in enumerate(toks) ]
         t = "".join(toks)
-        matches.append(MutationMatch(i + 1, s, t, indent))
+        matches.append(MutationMatch(line_idx + 1, s, t, indent))
     return matches
 

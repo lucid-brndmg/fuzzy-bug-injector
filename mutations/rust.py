@@ -240,6 +240,27 @@ class ConfuseCollectionOperations(Mutation):
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ]
 
+class ConfuseOptionOperations(Mutation):
+    SWAPS = [
+        ("and", ["or"]),
+        ("or", ["and"]),
+        
+        ("is_some", ["is_none"]),
+        ("is_none", ["is_some"]),
+    ]
+
+    def __init__(self):
+        super().__init__(
+            name="confuse-option-operations",
+            category="single-line",
+            description_template="Swaps option operations.",
+            fix_hint="Swap back.",
+        )
+
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ]
+
+
 # iter-skip-k (iter().skip(2)) (1 <= k <= 3)
 # swap-min-max (more than iterator, and also min_by vs max_by)
 # iter-append/remove-rev (iter().rev())
@@ -252,5 +273,6 @@ MUTATIONS: list[Mutation] = [
     SwapMatchArms(),
     BTreeToHash(),
     SwapRange(),
-    ConfuseCollectionOperations()
+    ConfuseCollectionOperations(),
+    ConfuseOptionOperations()
 ]
