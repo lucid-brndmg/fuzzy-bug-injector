@@ -247,6 +247,9 @@ class ConfuseOptionOperations(Mutation):
         
         ("is_some", ["is_none"]),
         ("is_none", ["is_some"]),
+
+        ("is_ok", ["is_err"]),
+        ("is_err", ["is_ok"])
     ]
 
     def __init__(self):

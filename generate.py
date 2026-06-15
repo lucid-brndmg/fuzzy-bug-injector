@@ -23,7 +23,13 @@ def default_sampler(
     max_mut: int,
 ) -> Generator[list[tuple[str, MutationMatch]], Any, None]:
     random.shuffle(candidates)
-    yield from iter_disjoint_subsets(candidates, check_disjoint, min_mut, max_mut, 2**32)
+    ps = iter_disjoint_subsets(candidates, check_disjoint, min_mut, max_mut, 2**32)
+    if len(candidates) <= 16:
+        subsets = list(ps)
+        random.shuffle(subsets)
+        yield from subsets
+    else:
+        yield from ps
 
 def generate_multi(
     id: str, src: str, lang: str,

@@ -143,7 +143,7 @@ class NegateConditionBranch(Mutation):
             indent = len(line) - len(line.lstrip())
 
             # if e, && e, || e, if (...)
-            found = list(re.finditer(r"(?:(or|and|&&|\|\||if)\s*)(\(*\w)", stripped))
+            found = list(re.finditer(r"(?:(or|and|&&|\|\||if|while)\:?\s*)(\(*\w)", stripped))
             if found == []:
                 continue
             
@@ -225,7 +225,7 @@ class ConfuseIndexVariable(Mutation):
         super().__init__(
             name="confuse-index-variable",
             category="single-line",
-            description_template="Attempts to set a +1/-1 to an index",
+            description_template="Attempts to set a -1 to an index",
             fix_hint="Swap back.",
         )
 
