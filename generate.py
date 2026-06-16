@@ -24,7 +24,8 @@ def default_sampler(
 ) -> Generator[list[tuple[str, MutationMatch]], Any, None]:
     random.shuffle(candidates)
     ps = iter_disjoint_subsets(candidates, check_disjoint, min_mut, max_mut, 2**32)
-    if len(candidates) <= 16:
+    # 2**24 would be a reasonable range
+    if len(candidates) <= 24:
         subsets = list(ps)
         random.shuffle(subsets)
         yield from subsets

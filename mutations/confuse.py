@@ -20,7 +20,6 @@ class ConfuseBitwiseLogic(Mutation):
             description_template="",
             fix_hint="",
         )
-        
 
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         swaps = list(self.SWAPS)
@@ -52,12 +51,13 @@ class ConfuseLogical(Mutation):
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         return [m for m in swap_random(lines, self.SWAPS, GENERAL_SYMBOL_PATTERN) if not is_comment(m.original)]
 
+# todo: line swap, pattern = ^\s*\**\w+\s*(\+=|-=|\*=|\/=)\s*(.*);\s*$ (previous / next lines not decl / parens / etc)
 class ConfuseAssignment(Mutation):
     SWAPS = [
         ("+=", ["="]),
-        ("-=", ["="]),
-        ("*=", ["=", "+="]),
-        ("/=", ["=", "-="])
+        ("-=", ["+= -"]),
+        ("*=", ["+="]),
+        ("/=", ["-="])
     ]
 
     def __init__(self):
@@ -72,18 +72,21 @@ class ConfuseAssignment(Mutation):
         return [m for m in swap_random(lines, self.SWAPS, GENERAL_SYMBOL_PATTERN) if not is_comment(m.original)]
 
 
-class ConfuseModDiv(Mutation):
+class ConfuseArithmetic(Mutation):
     def __init__(self):
         super().__init__(
-            name="confuse-mod-div",
+            name="confuse-arithmetic",
             category="single-line",
             description_template="",
-            fix_hint="Check the arithmetic operator (/, %).",
+            fix_hint="Check the arithmetic operator.",
         )
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         swaps = [
-            ("/", ["%"]),
-            ("%", ["/"])
+            ("-", ["+"]),
+            ("*", ["+"]),
+            ("/", ["-"]),
+            ("%", ["/"]),
+            ("**", ["*"])
         ]
         return [m for m in swap_random(lines, swaps, GENERAL_SYMBOL_PATTERN) if not is_comment(m.original)]
 
@@ -123,6 +126,8 @@ class FlipPlusMinusOne(Mutation):
             matches += candidates
         return matches
 
+# todo: cut condition branch
+# todo: floats
 class NegateConditionBranch(Mutation):
     # && e => && !e
     def __init__(self):
@@ -143,7 +148,7 @@ class NegateConditionBranch(Mutation):
             indent = len(line) - len(line.lstrip())
 
             # if e, && e, || e, if (...)
-            found = list(re.finditer(r"(?:(or|and|&&|\|\||if|while)\:?\s*)(\(*\w)", stripped))
+            found = list(re.finditer(r"(?:(or|and|&&|\|\||if|while)\s*)(\(*\w)", stripped))
             if found == []:
                 continue
             
@@ -186,6 +191,7 @@ class RemoveNegation(Mutation):
 
 class ConfuseIdentifiers(Mutation):
     SWAPS = [
+        # todo: append a parens on functions
         ("min", ["max"]), 
         ("max", ["min"]),
         ("floor", ["ceil", "round"]), 
@@ -201,11 +207,13 @@ class ConfuseIdentifiers(Mutation):
         ("false", ["true"]),
         ("True", ["False"]),
         ("False", ["True"]),
-        # ("0", ["1"]), ("1", ["0"]), 
-        ("2", ["1", "3"]),
-        ("180", ["360"]), ("360", ["180"]),
         ("continue", ["break"]),
         ("break", ["continue"]),
+
+        ("j", ["i"]), # not for k
+        ("y", ["x"]),
+        ("z", ["x", "y"]),
+        ("b", ["a"])
     ]
 
     def __init__(self):
@@ -218,6 +226,29 @@ class ConfuseIdentifiers(Mutation):
 
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ]
+
+class ConfuseNumericLiterals(Mutation):
+    SWAPS = [
+        # small unsigned integers
+        *[(str(i), [str(i + 1), str(i - 1)]) for i in range(2, 11)],
+        # 4, 8, .., 65535
+        *[(str(2 << i), [str((2 << i) - 1), str(2 << (i - 1)), str(2 << (i + 1))]) for i in range(2, 16)],
+        # 127, 255, 65535
+        *[(str((2 << i) - 1), [str(2 << i)]) for i in [6, 7, 15]],
+        # angles
+        *[(str(i * 60), [str((i + 3) * 60), str((i - 3) * 60)]) for i in [3, 6, 9, 12]],
+    ]
+
+    def __init__(self):
+        super().__init__(
+            name="confuse-numeric-literals",
+            category="single-line",
+            description_template="Swaps numeric literals",
+            fix_hint="Swap back.",
+        )
+
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN, 1) if not is_comment(m.original) ]
 
 class ConfuseIndexVariable(Mutation):
     INDEX_PATTERNS = ["i", "j", "k", "index", "idx", "length", "len()"]
@@ -265,8 +296,9 @@ MUTATIONS = [
     ConfuseLogical(),
     ConfuseAssignment(),
     ConfuseIdentifiers(),
-    ConfuseModDiv(),
+    ConfuseArithmetic(),
     ConfuseIndexVariable(),
+    ConfuseNumericLiterals(),
     
     FlipPlusMinusOne(),
     NegateConditionBranch(),
