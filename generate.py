@@ -169,7 +169,7 @@ def main():
         str_entry = type(entry) is str
         code = entry if str_entry else entry["code"]
         id = str(i if str_entry or "id" not in entry else entry["id"])
-        lang = "" if str_entry or "language" not in entry else entry["language"]
+        lang = args.lang if str_entry or "language" not in entry else entry["language"]
         batch = generate_multi(
             id, code, lang,
             mutation_apply,

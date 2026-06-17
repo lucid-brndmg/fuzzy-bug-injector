@@ -226,6 +226,9 @@ class ConfuseCollectionOperations(Mutation):
         ("first", ["last"]),
         ("last", ["next"]),
 
+        ("MAX", ["MIN"]),
+        ("MIN", ["MAX"])
+
         # not interested in reverse vs clear
     ]
 
@@ -244,6 +247,9 @@ class ConfuseOptionOperations(Mutation):
     SWAPS = [
         ("and", ["or"]),
         ("or", ["and"]),
+
+        ("and_then", ["or_else"]),
+        ("or_else", ["and_then"]),
         
         ("is_some", ["is_none"]),
         ("is_none", ["is_some"]),
@@ -265,9 +271,7 @@ class ConfuseOptionOperations(Mutation):
 
 
 # iter-skip-k (iter().skip(2)) (1 <= k <= 3)
-# swap-min-max (more than iterator, and also min_by vs max_by)
 # iter-append/remove-rev (iter().rev())
-# todo: apply use std::cmp::*; to every rust file
 
 MUTATIONS: list[Mutation] = [
     UnwrapToQuestionMark(),
