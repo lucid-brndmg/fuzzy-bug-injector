@@ -4,6 +4,7 @@ import os
 import random
 import re
 import subprocess
+import shlex
 from pathlib import Path
 from typing import Any, Generator
 
@@ -42,6 +43,8 @@ def generate_multi(
 ):
     lines_find = src.splitlines()
     lines_apply = src.splitlines(keepends=True)
+
+    validator_cmd = shlex.split(validator_script) if validator_script is not None else []
     
     candidates: list[tuple[str, MutationMatch]] = []
     for mutation in mutations:
@@ -50,7 +53,7 @@ def generate_multi(
             if validator_script is not None:
                 code = "".join(apply_mutations(lines_apply, [match]))
                 proc = subprocess.run([
-                    validator_script, 
+                    *validator_cmd, 
                     "--code", code,
                     "--language", lang, 
                     "--pre-validate",
@@ -77,7 +80,7 @@ def generate_multi(
         var_id = f"{id}:{i}"
         if validator_script is not None:
             proc = subprocess.run([
-                validator_script, 
+                *validator_cmd, 
                 "--code", code,
                 "--language", lang, 
                 "--id", var_id,
@@ -128,7 +131,7 @@ def main():
     args = parser.parse_args()
     if args.seed is not None:
         random.seed(args.seed)
-
+    
     mutation_inst = []
     for path in args.mutation_modules:
         loaded = []

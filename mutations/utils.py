@@ -6,6 +6,14 @@ from common.mutation import MutationMatch
 GENERAL_SYMBOL_PATTERN = r"[^\s\w]+"
 GENERAL_IDENTIFIER_PATTERN = r"\w+"
 GENERAL_IDENTIFIER_FUNCTION_PATTERN = r"\w+(\(\))?"
+GENERAL_VAR_DECL_ASSIGN_PATTERN = r"^\s*(let\s+|let\s+mut\s+|var\s+|const\s+)?[\w][\w.]*(?:\[.*?\])?\s*[+\-\*\/%&|^@\:]?=(?!=)\s*(.+)$"
+
+def line_split_assign(line: str) -> tuple[str, str]:
+    f = re.match(GENERAL_VAR_DECL_ASSIGN_PATTERN, line)
+    if f is None:
+        return ("", line)
+    i = f.start(2)
+    return (line[:i], line[i:])
 
 def swap_first(lines: list[str], swaps: list[tuple[str, str]]) -> list[MutationMatch]:
     matches = []
@@ -20,7 +28,6 @@ def swap_first(lines: list[str], swaps: list[tuple[str, str]]) -> list[MutationM
 
 def is_comment(stripped: str) -> bool:
     return stripped.lstrip().startswith(("#", "//"))
-
 
 def simple_tokenize(s: str, spans: list[tuple[int, int]]) -> list[str]:
     # spans MUST be an ASC list of tuples [s, t)
@@ -50,31 +57,36 @@ def swap_random(
     lines: list[str], 
     swaps: list[tuple[str, list[str]]],
     pattern: str,
-    replacement_ratio = 0.5
+    replacement_ratio = 0.5,
+    # line_split = line_split_assign
 ) -> list[MutationMatch]:
     matches = []
     for line_idx, line in enumerate(lines):
         s = line.rstrip()
+        (l, r) = line_split_assign(s)
         indent = len(line) - len(line.lstrip())
         replacement = {}
         olds = [ old for old, _news in swaps ]
-        spans = [ m.span() for m in re.finditer(pattern, s) if m.group() in olds ]
+        spans = [ m.span() for m in re.finditer(pattern, r) if m.group() in olds ]
         if spans == []:
             continue
-        toks = simple_tokenize(s, spans)
+        toks = simple_tokenize(r, spans)
         for old, news in swaps:
-            if old not in s:
+            if old not in r:
                 continue
-            targs = [ i for i, v in enumerate(toks) if v == old ]
-            if targs == []:
-                continue
-            k = min(max(round(len(targs) * replacement_ratio), 1), len(targs))
-            selected = random.sample(targs, k = k)
-
+            selected = [ i for i, v in enumerate(toks) if v == old ]
+            # if selected == []:
+            #     continue
+            # k = min(max(round(len(selected) * replacement_ratio), 1), len(selected))
+            # selected = random.sample(selected, k = k)
             for i in selected:
                 replacement[i] = random.choice(news)
-        toks = [ t if i not in replacement else replacement[i] for i, t in enumerate(toks) ]
-        t = "".join(toks)
+
+        k = min(max(round(len(replacement) * replacement_ratio), 1), len(replacement))
+        keys = random.sample(sorted(replacement), k = k)
+        
+        toks = [ t if i not in keys else replacement[i] for i, t in enumerate(toks) ]
+        t = l + "".join(toks)
         matches.append(MutationMatch(line_idx + 1, s, t, indent))
     return matches
 
