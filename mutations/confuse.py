@@ -1,7 +1,7 @@
 import re
 import random
 from common.mutation import Mutation, MutationMatch
-from mutations.utils import GENERAL_IDENTIFIER_FUNCTION_PATTERN, GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, swap_random
+from mutations.utils import GENERAL_IDENTIFIER_FUNCTION_PATTERN, GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, locate_parens, swap_random
 
 class ConfuseBitwiseLogic(Mutation):
     SWAPS = [
@@ -297,6 +297,85 @@ class RemoveElseIf(Mutation):
             matches.append(MutationMatch(i + 1, stripped, pref + "if" + suff, indent))
         return matches
 
+
+
+
+class RemoveParens(Mutation):
+    def __init__(self):
+        super().__init__(
+            name="remove-parens",
+            category="single-line",
+            description_template="Remove parens.",
+            fix_hint="Adds back.",
+        )
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        matches = []
+        replacement_ratio = 0.4
+        for i, line in enumerate(lines):
+            if is_comment(line):
+                continue
+
+            stripped = line.rstrip()
+            indent = len(line) - len(line.lstrip())
+            toks = [t for t in stripped]
+            parens = locate_parens(toks, ("(", ")"))
+            if parens == []:
+                continue
+            
+            k = min(max(round(len(parens) * replacement_ratio), 1), len(parens))
+            
+            parens = random.sample(parens, k = k)
+            for (x, y) in parens:
+                toks[x] = ""
+                toks[y] = ""
+            t = "".join(toks)
+            matches.append(MutationMatch(i + 1, stripped, t, indent))
+        
+        return matches
+        # return super().find_candidates(lines, lang)
+
+class IntroParens(Mutation):
+    OP_LEAD = ["-", "*", "/"]
+    OP_FOLLOW = ["+", "-", "*", "/", "**", "%"]
+    
+    def __init__(self):
+        super().__init__(
+            name="intro-parens",
+            category="single-line",
+            description_template="Introduce parens.",
+            fix_hint="Remove.",
+        )
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        matches = []
+        ptn = r"\w+(\(.*\))?"
+        for i, line in enumerate(lines):
+            if is_comment(line):
+                continue
+
+            stripped = line.rstrip()
+            indent = len(line) - len(line.lstrip())
+
+            toks = []
+            places = []
+            j = 0
+            while (j + 3) < len(toks):
+                t = toks[j]
+                if t in self.OP_LEAD and re.match(ptn, toks[j + 1]) and toks[j + 2] in self.OP_FOLLOW and re.match(ptn, toks[j + 3]):
+                    places.append(j + 1)
+                    j += 4
+                else:
+                    j += 1
+            
+            for j in places:
+                t = [ 
+                    ("(" + tok) if k == j else 
+                    (tok + ")") if k == j + 2 else 
+                    tok for k, tok in enumerate(toks) 
+                ]
+                matches.append(MutationMatch(i + 1, stripped, "".join(t), indent))
+            
+        return matches
+
 MUTATIONS = [
     ConfuseBitwiseLogic(),
     ConfuseLogical(),
@@ -310,4 +389,6 @@ MUTATIONS = [
     NegateConditionBranch(),
     RemoveNegation(),
     RemoveElseIf(),
+    RemoveParens(),
+    IntroParens()
 ]

@@ -53,6 +53,13 @@ def simple_tokenize(s: str, spans: list[tuple[int, int]]) -> list[str]:
     
     return toks
 
+def simple_tokenize_by(ptn: str, s: str) -> list[str]:
+    spans = [ m.span() for m in re.finditer(ptn, s) ]
+    if spans == []:
+        return []
+    toks = simple_tokenize(s, spans)
+    return toks
+
 def swap_random(
     lines: list[str], 
     swaps: list[tuple[str, list[str]]],
@@ -90,3 +97,16 @@ def swap_random(
         matches.append(MutationMatch(line_idx + 1, s, t, indent))
     return matches
 
+def locate_parens(line, parens: tuple[str, str]):
+    (lp, rp) = parens
+    stack = []
+    results = []
+    for j, c in enumerate(line):
+        if c == lp:
+            stack.append(j)
+        if c == rp:
+            if stack == []:
+                continue
+            i = stack.pop()
+            results.append((i, j))
+    return results
