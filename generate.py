@@ -92,7 +92,8 @@ def generate_multi(
         out.append({
             "id": var_id,
             "code": code,
-            "mutations": json_digest
+            "mutations": json_digest,
+            "original": src
         })
     
     return out

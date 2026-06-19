@@ -1,7 +1,7 @@
 import re
 import random
 from common.mutation import Mutation, MutationMatch
-from mutations.utils import GENERAL_IDENTIFIER_FUNCTION_PATTERN, GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, locate_parens, swap_random
+from mutations.utils import GENERAL_IDENTIFIER_FUNCTION_PATTERN, GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, locate_parens, simple_tokenize_by, simple_tokenize_by_multi, swap_random
 
 class ConfuseBitwiseLogic(Mutation):
     SWAPS = [
@@ -57,7 +57,7 @@ class ConfuseLogical(Mutation):
 # todo: line swap, pattern = ^\s*\**(\w+)\s*(=|\+=|-=|\*=|\/=)\s*(.*);\s*$ (previous / next lines not decl / parens / etc)
 class ConfuseAssignment(Mutation):
     SWAPS = [
-        ("+=", ["="]),
+        # ("+=", ["="]),
         ("-=", ["+="]),
         ("*=", ["+="]),
         ("/=", ["-="]),
@@ -133,6 +133,7 @@ class FlipPlusMinusOne(Mutation):
 # todo: cut condition branch
 # todo: floats
 # todo: confuse regex, \d, \w, etc
+# todo: locate && ||, then search backwards
 class NegateConditionBranch(Mutation):
     # && e => && !e
     def __init__(self):
@@ -318,7 +319,7 @@ class RemoveParens(Mutation):
             stripped = line.rstrip()
             indent = len(line) - len(line.lstrip())
             toks = [t for t in stripped]
-            parens = locate_parens(toks, ("(", ")"))
+            parens = [ (x, y) for (x, y) in locate_parens(toks, ("(", ")")) if abs(y - x) > 1]
             if parens == []:
                 continue
             
@@ -335,8 +336,15 @@ class RemoveParens(Mutation):
         # return super().find_candidates(lines, lang)
 
 class IntroParens(Mutation):
-    OP_LEAD = ["-", "*", "/"]
-    OP_FOLLOW = ["+", "-", "*", "/", "**", "%"]
+    OP_STOP = ["==", "!=", ">=", "<=", ">", "<", ";"]
+    OP_LEAD = ["-", "*", "/", "%", "**", "!", "&&", "&", "|", "^", "<<", ">>"]
+    OP_FOLLOW = {
+        "arithmetic": (["+", "-", "*", "/", "%", "**"], ["&&", "||"]),
+        "logic": (["&&", "||"], ["+", "-", "*", "/", "%", "**", "&", "|", "^", "<<", ">>"]),
+        "bitwise": (["&", "|", "^", "<<", ">>"], ["&&", "||"])
+    }
+    
+    # OP_FOLLOW = ["+", "-", "*", "/", "**", "%"]
     
     def __init__(self):
         super().__init__(
@@ -347,7 +355,10 @@ class IntroParens(Mutation):
         )
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         matches = []
-        ptn = r"\w+(\(.*\))?"
+        ptn = r"(\(|\)|\*\*|&&|\|\||<<|>>|\+|-|\*|\/|%|\^|\!|\||&)"
+        LP = "("
+        RP = ")"
+        op_follow_groups = {it : k for k in self.OP_FOLLOW for it in self.OP_FOLLOW[k][0]} | { "!": "logic" }
         for i, line in enumerate(lines):
             if is_comment(line):
                 continue
@@ -355,21 +366,49 @@ class IntroParens(Mutation):
             stripped = line.rstrip()
             indent = len(line) - len(line.lstrip())
 
-            toks = []
+            toks = simple_tokenize_by_multi([ptn, GENERAL_SYMBOL_PATTERN], stripped)
             places = []
             j = 0
-            while (j + 3) < len(toks):
+            p = 0
+            while j < len(toks):
                 t = toks[j]
-                if t in self.OP_LEAD and re.match(ptn, toks[j + 1]) and toks[j + 2] in self.OP_FOLLOW and re.match(ptn, toks[j + 3]):
-                    places.append(j + 1)
-                    j += 4
-                else:
-                    j += 1
+                if t == LP: p += 1
+                if t == RP: p -= 1
+                if j + 1 < len(toks) and t in self.OP_LEAD:
+                    group = op_follow_groups[t]
+                    (follow, excl) = self.OP_FOLLOW[group]
+                    stop = self.OP_STOP + excl
+                    k = j + 1
+                    q = p
+                    while k < len(toks):
+                        u = toks[k]
+                        if u == LP: q += 1
+                        if u == RP: q -= 1
+                        if u in stop: break
+                        if k + 1 < len(toks) and u in follow and q == p:
+                            l = k + 1
+                            r = p
+                            f = False
+                            while l < len(toks):
+                                v = toks[l]
+                                if v == LP: r += 1
+                                if v == RP: r -= 1
+                                if v in stop: 
+                                    f = True
+                                    break
+                                if r == q and v != LP and (v == RP or not re.match(ptn, v)):
+                                    places.append((j + 1, l))
+                                    # break
+                                l += 1
+                            if f:
+                                break
+                        k += 1
+                j += 1
             
-            for j in places:
+            for (l, r) in places:
                 t = [ 
-                    ("(" + tok) if k == j else 
-                    (tok + ")") if k == j + 2 else 
+                    ("(" + tok) if k == l else 
+                    (tok + ")") if k == r else 
                     tok for k, tok in enumerate(toks) 
                 ]
                 matches.append(MutationMatch(i + 1, stripped, "".join(t), indent))
