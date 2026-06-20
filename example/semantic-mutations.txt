@@ -31,4 +31,4 @@ confuse-index-variable
 
 btree-to-hash
 swap-range
-confuse-collection-operations
+confuse-common-operations

@@ -106,7 +106,7 @@ def swap_random(
         matches.append(MutationMatch(line_idx + 1, s, t, indent))
     return matches
 
-def locate_parens(line, parens: tuple[str, str]):
+def locate_parens(line, parens: tuple[str, str]) -> list[tuple[int, int]]:
     (lp, rp) = parens
     stack = []
     results = []

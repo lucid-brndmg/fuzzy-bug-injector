@@ -1,7 +1,9 @@
+from itertools import combinations
 import re
 import random
 from common.mutation import Mutation, MutationMatch
-from mutations.utils import GENERAL_IDENTIFIER_FUNCTION_PATTERN, GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, locate_parens, simple_tokenize_by, simple_tokenize_by_multi, swap_random
+from common.utils import is_disjoint_intervals
+from mutations.utils import GENERAL_IDENTIFIER_FUNCTION_PATTERN, GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, locate_parens, simple_tokenize_by_multi, swap_random
 
 class ConfuseBitwiseLogic(Mutation):
     SWAPS = [
@@ -195,7 +197,7 @@ class RemoveNegation(Mutation):
             matches.append(MutationMatch(i + 1, stripped, pref + suff, indent))
         return matches
 
-class ConfuseIdentifiers(Mutation):
+class ConfuseMathFunctions(Mutation):
     SWAPS = [
         # todo: append a parens on functions
         ("min", ["max"]), 
@@ -207,25 +209,11 @@ class ConfuseIdentifiers(Mutation):
         ("cos", ["sin", "tan"]),
         ("tan", ["cos", "sin", "atan"]),
         ("atan", ["tan"]),
-        ("log2", ["log10"]),
-        ("log10", ["log2"]),
-        
-        ("true", ["false"]),
-        ("false", ["true"]),
-        ("True", ["False"]),
-        ("False", ["True"]),
-        ("continue", ["break"]),
-        ("break", ["continue"]),
-
-        ("j", ["i"]), # not for k
-        ("y", ["x"]),
-        ("z", ["x", "y"]),
-        ("b", ["a"])
     ]
 
     def __init__(self):
         super().__init__(
-            name="confuse-identifiers",
+            name="confuse-math-functions",
             category="single-line",
             description_template="Swaps identifiers",
             fix_hint="Swap back.",
@@ -233,6 +221,73 @@ class ConfuseIdentifiers(Mutation):
 
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ]
+
+class ConfuseLanguageKeywords(Mutation):
+    SWAPS = [
+        ("true", ["false"]),
+        ("false", ["true"]),
+        ("True", ["False"]),
+        ("False", ["True"]),
+        ("continue", ["break"]),
+        ("break", ["continue"]),
+        ("and", ["or"]),
+        ("or", ["and"]),
+        ("xor", ["and", "or"]),
+        
+    ]
+
+    def __init__(self):
+        super().__init__(
+            name="confuse-language-keywords",
+            category="single-line",
+            description_template="Swaps identifiers",
+            fix_hint="Swap back.",
+        )
+
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ]
+
+class ConfuseVariablePatterns(Mutation):
+    SWAPS = [
+        ("j", ["i"]),
+        ("k", ["i", "j"]),
+        ("m", ["n"]),
+        ("y", ["x"]),
+        ("z", ["x", "y"]),
+        ("b", ["a"])
+    ]
+
+    def __init__(self):
+        super().__init__(
+            name="confuse-variable-patterns",
+            category="single-line",
+            description_template="Swaps identifiers",
+            fix_hint="Swap back.",
+        )
+    
+    def _match_duplicated_var(self, lines: list[str]):
+        matches = []
+        for i, line in enumerate(lines):
+            stripped = line.rstrip()
+            if is_comment(stripped):
+                continue
+            indent = len(line) - len(line.lstrip())
+            found = re.finditer(r"([\w]*[a-zA-Z_])(\d+)", stripped)
+            found = [ it for it in found if int(it.group(2)) <= 3 ]
+            if found == []:
+                continue
+            for f in found:
+                pref = f.group(1)
+                k = int(f.group(2))
+                s = stripped[: f.start()]
+                t = stripped[f.end():]
+                for j in range(k):
+                    repl = pref if j == 0 else (pref + str(j))
+                    matches.append(MutationMatch(i + 1, stripped, s + repl + t, indent))
+        return matches
+
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ] + self._match_duplicated_var(lines)
 
 class ConfuseNumericLiterals(Mutation):
     SWAPS = [
@@ -415,11 +470,57 @@ class IntroParens(Mutation):
             
         return matches
 
+class SwapParens(Mutation):
+    PARENS = [
+        ("(", ")"),
+        ("[", "]"),
+        ("{", "}")
+    ]
+    def __init__(self):
+        super().__init__(
+            name="swap-parens",
+            category="single-line",
+            description_template="Swap parens.",
+            fix_hint="Swap back.",
+        )
+    
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        matches = []
+        for i, line in enumerate(lines):
+            if is_comment(line):
+                continue
+            stripped = line.rstrip()
+            indent = len(line) - len(line.lstrip())
+            toks = [t for t in stripped]
+            parens = [locate_parens(toks, pair) for pair in self.PARENS]
+            for located in parens:
+                if len(located) < 2:
+                    continue
+                paren_pairs = [ (a, b) for a, b in combinations(located, 2) if is_disjoint_intervals(a, b) ]
+                for (a, b) in paren_pairs:
+                    (u, v) = a
+                    (s, t) = b
+                    toks_repl = list(toks)
+                    # s1 [s2] s3 [s4] s5
+                    s1 = toks_repl[0:u]
+                    s2 = toks_repl[u:v + 1]
+                    s3 = toks_repl[v + 1:s]
+                    s4 = toks_repl[s:t + 1]
+                    s5 = toks_repl[t + 1:]
+                    replaced = "".join(s1 + s4 + s3 + s2 + s5)
+                    matches.append(MutationMatch(i + 1, stripped, replaced, indent))
+            
+        return matches
+        # return super().find_candidates(lines, lang)
+
 MUTATIONS = [
     ConfuseBitwiseLogic(),
     ConfuseLogical(),
     ConfuseAssignment(),
-    ConfuseIdentifiers(),
+    ConfuseMathFunctions(),
+    ConfuseLanguageKeywords(),
+    ConfuseVariablePatterns(),
+    
     ConfuseArithmetic(),
     ConfuseIndexVariable(),
     ConfuseNumericLiterals(),
@@ -429,5 +530,6 @@ MUTATIONS = [
     RemoveNegation(),
     RemoveElseIf(),
     RemoveParens(),
-    IntroParens()
+    IntroParens(),
+    SwapParens()
 ]

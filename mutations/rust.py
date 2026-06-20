@@ -202,9 +202,9 @@ class SwapRange(Mutation):
             if not is_comment(m.original)
         ]
 
-class ConfuseCollectionOperations(Mutation):
+class ConfuseCommonOperations(Mutation):
     SWAPS = [
-        ("prod", ["sum"]),
+        ("product", ["sum"]),
 
         ("skip", ["take", "step_by"]),
         ("take", ["skip", "step_by"]),
@@ -227,16 +227,26 @@ class ConfuseCollectionOperations(Mutation):
         ("last", ["next"]),
 
         ("MAX", ["MIN"]),
-        ("MIN", ["MAX"])
+        ("MIN", ["MAX"]),
+
+        ("leading_zeros", ["leading_ones", "trailing_zeros", "count_zeros"]),
+        ("leading_ones", ["leading_zeros", "trailing_ones", "count_ones"]),
+
+        ("is_positive", ["is_negative"]),
+        ("is_negative", ["is_positive"]),
+
+        ("log2", ["log10"]),
+        ("log10", ["log2"]),
+        
 
         # not interested in reverse vs clear
     ]
 
     def __init__(self):
         super().__init__(
-            name="confuse-collection-operations",
+            name="confuse-common-operations",
             category="single-line",
-            description_template="Swaps collection operations.",
+            description_template="Swaps common rust operations.",
             fix_hint="Swap back.",
         )
 
@@ -269,7 +279,39 @@ class ConfuseOptionOperations(Mutation):
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ]
 
+class RemoveOperations(Mutation):
+    # removing these won't affect the expression's type
+    PATTERNS = [
+        r"\.abs\(\s*\)", 
+        r"\.rev\(\s*\)",
+        r"\.skip\(\s*\w+\s*\)",
+        r"\.take\(\s*\w+\s*\)",
+    ]
 
+    def __init__(self):
+        super().__init__(
+            name="remove-operations",
+            category="single-line",
+            description_template="Swaps option operations.",
+            fix_hint="Swap back.",
+        )
+
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        matches = []
+        for i, line in enumerate(lines):
+            stripped = line.rstrip()
+            indent = len(line) - len(line.lstrip())
+            if is_comment(stripped):
+                continue
+            found = [ m for ptn in self.PATTERNS for m in re.findall(ptn, stripped) ]
+            if found == []:
+                continue
+            for f in found:
+                pref = stripped[: f.start(0)]
+                suff = stripped[f.end(0) :]
+                matches.append(MutationMatch(i + 1, stripped, pref + suff, indent))
+        return matches
+        # return super().find_candidates(lines, lang)
 # iter-skip-k (iter().skip(2)) (1 <= k <= 3)
 # iter-append/remove-rev (iter().rev())
 
@@ -280,6 +322,7 @@ MUTATIONS: list[Mutation] = [
     SwapMatchArms(),
     BTreeToHash(),
     SwapRange(),
-    ConfuseCollectionOperations(),
-    ConfuseOptionOperations()
+    ConfuseCommonOperations(),
+    ConfuseOptionOperations(),
+    RemoveOperations()
 ]
