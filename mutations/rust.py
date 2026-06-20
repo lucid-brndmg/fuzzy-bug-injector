@@ -313,7 +313,7 @@ class RemoveOperations(Mutation):
         return matches
         # return super().find_candidates(lines, lang)
 # iter-skip-k (iter().skip(2)) (1 <= k <= 3)
-# iter-append/remove-rev (iter().rev())
+# iter-append-rev (iter().rev())
 
 MUTATIONS: list[Mutation] = [
     UnwrapToQuestionMark(),

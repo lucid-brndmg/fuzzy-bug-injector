@@ -489,7 +489,7 @@ class SwapAdjacentLines(Mutation):
 
     def _is_simple_statement(self, line: str) -> bool:
         content = line.strip()
-        if not content or any(content.startswith(y) for y in ["#", "//", "}", "]", ")"]):
+        if not content or any(content.startswith(y) for y in ["#", "//"]):
             return False
         for prefix in self._STRUCTURAL:
             if content.startswith(prefix):
@@ -504,12 +504,15 @@ class SwapAdjacentLines(Mutation):
 
         Such pairs are less interesting because swapping doesn't change semantics.
         """
-        pat = re.compile(r"^\s*([a-zA-Z_]\w*)\s*=(?!=)")
+        # group 1
+        # pat = re.compile(r"^\s*\**([a-zA-Z_]\w*)\s*=(?!=)")
+        # group 2
+        pat = re.compile(r"^\s*(\w+\s+)?\**([a-zA-Z_]\w*)(\.\w+|\s*:\s*\w+|\[.*\])*\s*([\+\-\*\/\:]|<<|>>|&|\|)?=(?!=)")
         ma = pat.match(line_a)
         mb = pat.match(line_b)
         if not (ma and mb):
             return False
-        var_a, var_b = ma.group(1), mb.group(1)
+        var_a, var_b = ma.group(2), mb.group(2)
         if var_a == var_b:
             return False
         rhs_a = line_a[ma.end():]
