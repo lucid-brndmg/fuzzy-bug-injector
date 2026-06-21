@@ -465,8 +465,9 @@ class DuplicateLineFlip(Mutation):
 
 # ── Single-site, multi-line mutations ─────────────────────────────────
 
-
-class SwapAdjacentLines(Mutation):
+# todo: line threshold
+# todo: find variable RHS pattern
+class SwapAdjacentAssignments(Mutation):
     """Swap two adjacent single-line statements.
 
     Tests whether the model can detect order-dependent logic: e.g.
@@ -481,10 +482,10 @@ class SwapAdjacentLines(Mutation):
 
     def __init__(self):
         super().__init__(
-            name="swap-adjacent-lines",
+            name="swap-adjacent-assignments",
             category="multi-line",
             description_template="Two adjacent statements are in the wrong order.",
-            fix_hint="Two adjacent lines need to be swapped back to their correct order.",
+            fix_hint="Two adjacent variable assignments need to be swapped back to their correct order.",
         )
 
     def _is_simple_statement(self, line: str) -> bool:
@@ -865,7 +866,7 @@ class RenamePartial(Mutation):
             for ln in mutated_lines[1:]:
                 orig = lines[ln].rstrip()
                 mut = re.sub(rf"\b{re.escape(name)}\b", new_name, orig, count=1)
-                extra.append((ln + 1, orig, mut))
+                extra.append((ln + 1, orig, mut, None))
 
             matches.append(
                 MutationMatch(
@@ -953,7 +954,7 @@ MUTATIONS: list[Mutation] = [
     DuplicateLineFlip(),
     
     # Single-site, multi-line (Python-only)
-    SwapAdjacentLines(),
+    SwapAdjacentAssignments(),
     # Multi-site (universal)
     RenamePartial(),
     InconsistentLiteral(),

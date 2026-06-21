@@ -1,5 +1,6 @@
 """Rust-specific mutations for edit benchmarks."""
 
+from itertools import islice, permutations
 import re
 
 from common.mutation import Mutation, MutationMatch
@@ -151,6 +152,59 @@ class SwapMatchArms(Mutation):
             i += 1
         return matches
 
+class ConfuseMatchArms(Mutation):
+    _ARM_PATTERN = re.compile(r"^(\s*)(.+?)\s*=>\s*(.+),\s*$")
+    MAX_SKIP = 10
+
+    def __init__(self):
+        super().__init__(
+            name="confuse-match-arms",
+            category="multi-line",
+            description_template="Two match arms are in the wrong order.",
+            fix_hint="Swap the two adjacent match arms back to their correct order.",
+        )
+    
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        matches = []
+        n = len(lines)
+
+        for i in range(n - 1):
+            line_a = lines[i]
+            indent_a = len(line_a) - len(line_a.lstrip())
+            a_content = line_a.rstrip()
+            arm = self._ARM_PATTERN.match(a_content)
+            if not arm:
+                continue
+            target_lines = []
+            j = i + 1
+            acc_lines = 0
+            while j < n and acc_lines <= self.MAX_SKIP:
+                if "fn " in lines[j]:
+                    break
+                m = self._ARM_PATTERN.match(lines[j])
+                if m and "_" not in [ it.strip() for it in m.group(2).split("|")] :
+                    target_lines.append(j)
+
+                acc_lines += int(lines[j].strip() != "")
+                j += 1
+            if target_lines == []:
+                continue
+
+            for j in target_lines:
+                line_b = lines[j]
+                indent_b = len(line_b) - len(line_b.lstrip())
+                b_content = line_b.rstrip()
+                matches.append(MutationMatch(
+                    None, "", "", 0, None,
+                    [
+                        (i + 1, line_a, b_content, indent_a),
+                        (j + 1, line_b, a_content, indent_b)
+                    ]
+                ))
+        
+        return matches
+        # return super().find_candidates(lines, lang)
+
 class BTreeToHash(Mutation):
     def __init__(self):
         super().__init__(
@@ -177,7 +231,7 @@ class BTreeToHash(Mutation):
                     continue
                 if f"BTree{suff}" in line:
                     t = t.replace(f"BTree{suff}", f"Hash{suff}")
-                    sites.append((i + 1, s, t))
+                    sites.append((i + 1, s, t, None))
     
             m = MutationMatch(use_bt_idx + 1, lines[use_bt_idx], repl, 0)
             m.extra_sites = sites
@@ -324,5 +378,6 @@ MUTATIONS: list[Mutation] = [
     SwapRange(),
     ConfuseCommonOperations(),
     ConfuseOptionOperations(),
+    ConfuseMatchArms(),
     RemoveOperations()
 ]

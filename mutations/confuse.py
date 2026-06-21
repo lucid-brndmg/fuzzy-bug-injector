@@ -3,7 +3,7 @@ import re
 import random
 from common.mutation import Mutation, MutationMatch
 from common.utils import is_disjoint_intervals
-from mutations.utils import GENERAL_IDENTIFIER_FUNCTION_PATTERN, GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, locate_parens, simple_tokenize_by_multi, swap_random
+from mutations.utils import GENERAL_IDENTIFIER_FUNCTION_PATTERN, GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, locate_parens, simple_tokenize_by, simple_tokenize_by_multi, swap_random
 
 class ConfuseBitwiseLogic(Mutation):
     SWAPS = [
@@ -254,7 +254,12 @@ class ConfuseVariablePatterns(Mutation):
         ("m", ["n"]),
         ("y", ["x"]),
         ("z", ["x", "y"]),
-        ("b", ["a"])
+        ("b", ["a"]),
+        ("ys", ["xs"]),
+        ("col", ["row"]),
+        ("row", ["col"]),
+        ("cols", ["rows"]),
+        ("rows", ["cols"])
     ]
 
     def __init__(self):
@@ -313,7 +318,7 @@ class ConfuseNumericLiterals(Mutation):
         return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN, 1.0) if not is_comment(m.original) ]
 
 class ConfuseIndexVariable(Mutation):
-    INDEX_PATTERNS = ["i", "j", "k", "index", "idx", "length", "len()"]
+    INDEX_PATTERNS = ["n", "m", "i", "j", "k", "index", "idx", "length", "len()"]
     def __init__(self):
         super().__init__(
             name="confuse-index-variable",
@@ -323,7 +328,7 @@ class ConfuseIndexVariable(Mutation):
         )
 
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
-        swaps = [ (v, [f"{v} - 1"]) for v in self.INDEX_PATTERNS ]
+        swaps = [ (v, [f"{v} - 1", f"({v} - 1)"]) for v in self.INDEX_PATTERNS ]
         
         return [ m for m in swap_random(lines, swaps, GENERAL_IDENTIFIER_FUNCTION_PATTERN) if not is_comment(m.original) ]
 
@@ -480,7 +485,7 @@ class SwapParens(Mutation):
         super().__init__(
             name="swap-parens",
             category="single-line",
-            description_template="Swap parens.",
+            description_template="Swap disjoint pairs of parens.",
             fix_hint="Swap back.",
         )
     
@@ -513,6 +518,162 @@ class SwapParens(Mutation):
         return matches
         # return super().find_candidates(lines, lang)
 
+class SwapAdjacentLines(Mutation):
+    """Swap two adjacent single-line statements.
+
+    Tests whether the model can detect order-dependent logic: e.g.
+    a = compute_x() / b = compute_y() vs b = compute_y() / a = compute_x().
+    """
+
+    # Prefixes that mark structural/block statements (not eligible to swap)
+    _STRUCTURAL = (
+        "if ", "elif ", "else:", "for ", "while ", "with ", 
+        "fn ", "fun ",
+        "try:", "except", "finally:", "class ", "def ", "async ", "@",
+    )
+
+    VAR_ASSIGN_PATTERN = re.compile(r"^\s*(\w+\s+)?\**([a-zA-Z_]\w*)(\.\w+|\s*:\s*\w+|\[.*\])*\s*([\+\-\*\/\:]|<<|>>|&|\|)?=(?!=)")
+    MAX_SKIP = 3
+
+    def __init__(self):
+        super().__init__(
+            name="swap-adjacent-lines",
+            category="multi-line",
+            description_template="Two adjacent statements are in the wrong order.",
+            fix_hint="Two adjacent variable assignments need to be swapped back to their correct order.",
+        )
+
+    def _is_simple_statement(self, line: str) -> bool:
+        content = line.strip()
+        if not content or any(content.startswith(y) for y in ["#", "//"]):
+            return False
+        for prefix in self._STRUCTURAL:
+            if content.startswith(prefix):
+                return False
+        # Block headers end with ':'
+        if content.endswith((":", "{", "(")):
+            return False
+        return True
+
+    def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
+        matches = []
+        n = len(lines)
+
+        for i in range(n - 1):
+            line_a = lines[i]
+            if not self._is_simple_statement(line_a):
+                continue
+            indent_a = len(line_a) - len(line_a.lstrip())
+            a_content = line_a.rstrip()
+            var_assign = self.VAR_ASSIGN_PATTERN.match(a_content)
+            if not var_assign:
+                continue
+            var = var_assign.group(2)
+
+            j = i + 1
+            acc_lines = 0
+            # qualify = False
+            target_lines = []
+            while j < n and acc_lines <= self.MAX_SKIP:
+                if not self._is_simple_statement(lines[j]) and (re.search(rf"\b{re.escape(var)}\b", lines[j]) is not None) and (a_content != lines[j].rstrip()):
+                    target_lines.append(j)
+                acc_lines += int(lines[j].strip() != "")
+                j += 1
+
+            j = i - 1
+            acc_lines = 0
+            while j >= 0 and acc_lines <= self.MAX_SKIP:
+                if not self._is_simple_statement(lines[j]) and (re.search(rf"\b{re.escape(var)}\b", lines[j]) is not None) and (a_content != lines[j].rstrip()):
+                    target_lines.append(j)
+                acc_lines += int(lines[j].strip() != "")
+                j -= 1
+
+            if target_lines == []:
+                continue
+
+            for j in target_lines:
+                line_b = lines[j]
+                indent_b = len(line_b) - len(line_b.lstrip())
+                b_content = line_b.rstrip()
+                matches.append(MutationMatch(
+                    None, "", "", 0, None,
+                    [
+                        (i + 1, line_a, b_content, indent_a),
+                        (j + 1, line_b, a_content, indent_b)
+                    ]
+                ))
+
+        return matches
+
+class SwapOperatorArgs(Mutation):
+    # this better be handled by a parser ... lazy
+    OPS = ["-", "/", "<<", ">>", "**", "%"]
+
+    def __init__(self):
+        super().__init__(
+            name="swap-operator-args",
+            category="single-line",
+            description_template="Two adjacent statements are in the wrong order.",
+            fix_hint="Two adjacent variable assignments need to be swapped back to their correct order.",
+        )
+
+    def find_candidates(self, lines: list[str], lang: str = "") -> list[MutationMatch]:
+        matches = []
+        for i, line in enumerate(lines):
+            if is_comment(line):
+                continue
+            stripped = line.rstrip()
+            indent = len(line) - len(line.lstrip())
+            toks = simple_tokenize_by(GENERAL_SYMBOL_PATTERN, stripped)
+            nt = len(toks)
+            for j, tok in enumerate(toks):
+                if tok not in self.OPS:
+                    continue
+                li = j - 1; ri = j + 1
+                p = 0; b = 0; q = False
+                while li >= 0:
+                    if toks[li] == ")":
+                        p -= 1
+                    elif toks[li] == "(":
+                        p += 1
+                    elif toks[li] == "]":
+                        b -= 1
+                    elif toks[li] == "[":
+                        b += 1
+                    elif p == 0 and b == 0 and re.match(r"^\s*\w", toks[li]):
+                        q = True
+                        break
+                    li -= 1
+                if not q: continue
+                p = 0; b = 0; q = False
+                while ri < nt:
+                    if toks[ri] == ")":
+                        p -= 1
+                    elif toks[ri] == "(":
+                        p += 1
+                    elif toks[ri] == "]":
+                        b -= 1
+                    elif toks[ri] == "[":
+                        b += 1
+                    elif p == 0 and b == 0 and re.match(r"^\s*\w", toks[ri]):
+                        q = True
+                        break
+                    ri += 1
+                if not q: continue
+
+                pref = toks[:li]
+                lhs = toks[li : j]
+                rhs = toks[j + 1: ri + 1]
+                suff = toks[ri + 1:]
+
+                matches.append(MutationMatch(
+                    i + 1, stripped,
+                    "".join(pref + rhs + [tok] + lhs + suff),
+                    indent
+                ))
+                
+        return matches
+
 MUTATIONS = [
     ConfuseBitwiseLogic(),
     ConfuseLogical(),
@@ -531,5 +692,6 @@ MUTATIONS = [
     RemoveElseIf(),
     RemoveParens(),
     IntroParens(),
-    SwapParens()
+    SwapParens(),
+    SwapAdjacentLines()
 ]

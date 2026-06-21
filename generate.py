@@ -11,7 +11,7 @@ from typing import Any, Generator
 from common.utils import load_module, load_path, iter_disjoint_subsets
 from common.mutation import Mutation, MutationMatch, apply_mutations
 
-DEFAULT_MUTATION_MODULE = str(Path(os.path.dirname(os.path.realpath(__file__))) / "mutations" / "common.py")
+DEFAULT_MUTATION_MODULE = str(Path(os.path.dirname(os.path.realpath(__file__))) / "mutations" / "confuse.py")
 
 def check_disjoint(a, b):
     (_name1, mat1) = a
@@ -154,7 +154,9 @@ def main():
         if file.name.endswith(".json"):
             content = json.loads(file.read_text())
         else:
-            content = re.split(r'\s+', file.read_text())
+            lines = file.read_text().splitlines()
+            lines = [line for line in lines if re.match(r"^\w", line.strip())]
+            content = re.split(r'\s+', " ".join(lines))
         mut_whitelist += [name for name in content if len(name) > 0]
     
     mutation_apply = [ m for m in mutation_inst if m.name in mut_whitelist ]

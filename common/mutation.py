@@ -4,7 +4,7 @@ from common.utils import is_disjoint_intervals
 
 @dataclass
 class MutationMatch:
-    line_number: int  # 1-indexed, primary line
+    line_number: int | None  # 1-indexed, primary line
     original: str  # original content (may be multi-line, joined by \n)
     mutated: str  # mutated content (empty string = delete)
     indent: int  # leading spaces of primary line
@@ -13,10 +13,11 @@ class MutationMatch:
     end_line: int | None = None  # inclusive end line (None = single line)
 
     # For multi-site mutations: additional (line, original, mutated) tuples
-    extra_sites: list[tuple[int, str, str]] = field(default_factory=list)
+    extra_sites: list[tuple[int, str, str, int | None]] = field(default_factory=list)
     
     def intervals(self) -> list[tuple[int, int]]:
-        return [(line, line + len(new.split("\n")) - 1) for (line, _1, new) in self.extra_sites] + [(self.line_number, self.end_line if self.end_line is not None else self.line_number)]
+        main_lines = [(self.line_number, self.end_line if self.end_line is not None else self.line_number)] if self.line_number is not None else []
+        return [(line, line + len(new.split("\n")) - 1) for (line, _1, new, _2) in self.extra_sites] + main_lines
     
     def is_disjoint(self, other) -> bool:
         i1 = self.intervals()
@@ -42,20 +43,22 @@ def apply_mutations(lines: list[str], muts: list[MutationMatch]) -> list[str]:
     result = list(lines)
     digests = []
     for mut in muts:
-        digests.append((
-            mut.line_number,
-            mut.end_line if mut.end_line is not None else mut.line_number,
-            mut.mutated,
-            len(mut.mutated.split("\n")),
-            mut.indent
-        ))
-        for (line, _original, mutated) in mut.extra_sites:
+        if mut.line_number is not None:
+            # otherwise, this is multi-site mutation
+            digests.append((
+                mut.line_number,
+                mut.end_line if mut.end_line is not None else mut.line_number,
+                mut.mutated,
+                len(mut.mutated.split("\n")),
+                mut.indent
+            ))
+        for (line, _original, mutated, indent) in mut.extra_sites:
             digests.append((
                 line,
                 line,
                 mutated,
                 len(mutated.split("\n")),
-                mut.indent
+                indent if indent is not None else mut.indent
             ))
     digests = sorted(digests, key = lambda it : it[0], reverse=False)
     offset = 0
