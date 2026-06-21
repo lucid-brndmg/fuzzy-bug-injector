@@ -1,10 +1,9 @@
 """Rust-specific mutations for edit benchmarks."""
 
-from itertools import islice, permutations
 import re
 
 from common.mutation import Mutation, MutationMatch
-from mutations.utils import GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, swap_random
+from mutations.utils import GENERAL_IDENTIFIER_PATTERN, GENERAL_SYMBOL_PATTERN, is_comment, simple_tokenize_by, swap_random
 
 class UnwrapToQuestionMark(Mutation):
     """Remove `.unwrap()` calls, forcing the model to add them back.
@@ -154,7 +153,7 @@ class SwapMatchArms(Mutation):
 
 class ConfuseMatchArms(Mutation):
     _ARM_PATTERN = re.compile(r"^(\s*)(.+?)\s*=>\s*(.+),\s*$")
-    MAX_SKIP = 10
+    MAX_SKIP = 5
 
     def __init__(self):
         super().__init__(
@@ -215,27 +214,29 @@ class BTreeToHash(Mutation):
         )
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         matches = []
-        for suff in ["Map", "Set"]:
-            use_bt_stmt = [i for i, s in enumerate(lines) if f"collections::BTree{suff}" in s]
-            if use_bt_stmt == []:
-                return []
-            use_bt_idx = use_bt_stmt[0]
-            use_hs_stmt = [i for i, s in enumerate(lines) if f"use std::collections::Hash{suff}" in s]
-            repl = "" if use_hs_stmt != [] else f"use std::collections::Hash{suff}"
-            sites = []
-    
-            for i, line in enumerate(lines):
-                s = line.rstrip()
-                t = s
-                if i == use_bt_idx:
-                    continue
-                if f"BTree{suff}" in line:
-                    t = t.replace(f"BTree{suff}", f"Hash{suff}")
-                    sites.append((i + 1, s, t, None))
-    
-            m = MutationMatch(use_bt_idx + 1, lines[use_bt_idx], repl, 0)
-            m.extra_sites = sites
-            matches.append(m)
+        sites = []
+        for i, line in enumerate(lines):
+            if is_comment(line):
+                continue
+            stripped = line.rstrip()
+            indent = len(line) - len(line.lstrip())
+            toks = simple_tokenize_by(GENERAL_IDENTIFIER_PATTERN, stripped)
+            repl = []
+            f = False
+            for tok in toks:
+                if tok == "BTreeMap":
+                    repl.append("HashMap")
+                    f = True
+                elif tok == "BTreeSet":
+                    repl.append("HashSet")
+                    f = True
+                else:
+                    repl.append(tok)
+            if not f:
+                continue
+            sites.append((i + 1, stripped, "".join(repl), indent))
+        if sites != []:
+            matches.append(MutationMatch(None, "", "", 0, None, sites))
         return matches
 
 class SwapRange(Mutation):
@@ -333,7 +334,7 @@ class ConfuseOptionOperations(Mutation):
     def find_candidates(self, lines: list[str], lang: str = "python") -> list[MutationMatch]:
         return [ m for m in swap_random(lines, self.SWAPS, GENERAL_IDENTIFIER_PATTERN) if not is_comment(m.original) ]
 
-class RemoveOperations(Mutation):
+class RemoveCollectionOperations(Mutation):
     # removing these won't affect the expression's type
     PATTERNS = [
         r"\.abs\(\s*\)", 
@@ -344,7 +345,7 @@ class RemoveOperations(Mutation):
 
     def __init__(self):
         super().__init__(
-            name="remove-operations",
+            name="remove-collection-operations",
             category="single-line",
             description_template="Swaps option operations.",
             fix_hint="Swap back.",
@@ -357,7 +358,7 @@ class RemoveOperations(Mutation):
             indent = len(line) - len(line.lstrip())
             if is_comment(stripped):
                 continue
-            found = [ m for ptn in self.PATTERNS for m in re.findall(ptn, stripped) ]
+            found = [ m for ptn in self.PATTERNS for m in re.finditer(ptn, stripped) ]
             if found == []:
                 continue
             for f in found:
@@ -379,5 +380,5 @@ MUTATIONS: list[Mutation] = [
     ConfuseCommonOperations(),
     ConfuseOptionOperations(),
     ConfuseMatchArms(),
-    RemoveOperations()
+    RemoveCollectionOperations()
 ]

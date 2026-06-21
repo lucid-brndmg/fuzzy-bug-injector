@@ -1,0 +1,15 @@
+fn main(){
+    (a - b) / (c - d);
+    xs[1] - xs[2];
+    dp[i - 1][j + 1];
+    let xs = ys.iter().skip(3).rev();
+    i += 1;
+    j += i;
+
+    match foo{
+        a => 1,
+        b => 2,
+        c => 3,
+        _ => 100
+    }
+}

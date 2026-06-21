@@ -60,7 +60,7 @@ class ConfuseLogical(Mutation):
 class ConfuseAssignment(Mutation):
     SWAPS = [
         # ("+=", ["="]),
-        ("-=", ["+="]),
+        ("-=", ["+= -"]), # "+=", 
         ("*=", ["+="]),
         ("/=", ["-="]),
         ("%=", ["/="]),
@@ -532,7 +532,7 @@ class SwapAdjacentLines(Mutation):
         "try:", "except", "finally:", "class ", "def ", "async ", "@",
     )
 
-    VAR_ASSIGN_PATTERN = re.compile(r"^\s*(\w+\s+)?\**([a-zA-Z_]\w*)(\.\w+|\s*:\s*\w+|\[.*\])*\s*([\+\-\*\/\:]|<<|>>|&|\|)?=(?!=)")
+    VAR_ASSIGN_PATTERN = re.compile(r"^\s*(\w+\s+)*\**([a-zA-Z_]\w*)(\.\w+|\s*:\s*\w+|\[.*\])*\s*([\+\-\*\/\:]|<<|>>|&|\|)?=(?!=)")
     MAX_SKIP = 3
 
     def __init__(self):
@@ -575,7 +575,7 @@ class SwapAdjacentLines(Mutation):
             # qualify = False
             target_lines = []
             while j < n and acc_lines <= self.MAX_SKIP:
-                if not self._is_simple_statement(lines[j]) and (re.search(rf"\b{re.escape(var)}\b", lines[j]) is not None) and (a_content != lines[j].rstrip()):
+                if self._is_simple_statement(lines[j]) and (re.search(rf"\b{re.escape(var)}\b", lines[j]) is not None) and (a_content != lines[j].rstrip()):
                     target_lines.append(j)
                 acc_lines += int(lines[j].strip() != "")
                 j += 1
@@ -583,7 +583,7 @@ class SwapAdjacentLines(Mutation):
             j = i - 1
             acc_lines = 0
             while j >= 0 and acc_lines <= self.MAX_SKIP:
-                if not self._is_simple_statement(lines[j]) and (re.search(rf"\b{re.escape(var)}\b", lines[j]) is not None) and (a_content != lines[j].rstrip()):
+                if self._is_simple_statement(lines[j]) and (re.search(rf"\b{re.escape(var)}\b", lines[j]) is not None) and (a_content != lines[j].rstrip()):
                     target_lines.append(j)
                 acc_lines += int(lines[j].strip() != "")
                 j -= 1
@@ -619,12 +619,15 @@ class SwapOperatorArgs(Mutation):
 
     def find_candidates(self, lines: list[str], lang: str = "") -> list[MutationMatch]:
         matches = []
+        ptn = r"(\w+(\([\w\s,\+]*\)|\[[\w\s,\+]*\])?)"
         for i, line in enumerate(lines):
             if is_comment(line):
                 continue
             stripped = line.rstrip()
             indent = len(line) - len(line.lstrip())
-            toks = simple_tokenize_by(GENERAL_SYMBOL_PATTERN, stripped)
+            toks = simple_tokenize_by(ptn, stripped)
+            toks = [ x for t in toks for x in ([t] if re.match(ptn, t) else simple_tokenize_by(GENERAL_SYMBOL_PATTERN, t)) ]
+            print(toks)
             nt = len(toks)
             for j, tok in enumerate(toks):
                 if tok not in self.OPS:
@@ -632,30 +635,32 @@ class SwapOperatorArgs(Mutation):
                 li = j - 1; ri = j + 1
                 p = 0; b = 0; q = False
                 while li >= 0:
-                    if toks[li] == ")":
+                    tl = toks[li].strip()
+                    if tl == ")":
                         p -= 1
-                    elif toks[li] == "(":
+                    elif tl == "(":
                         p += 1
-                    elif toks[li] == "]":
+                    elif tl == "]":
                         b -= 1
-                    elif toks[li] == "[":
+                    elif tl == "[":
                         b += 1
-                    elif p == 0 and b == 0 and re.match(r"^\s*\w", toks[li]):
+                    elif p == 0 and b == 0 and toks[li].strip() != "": # and re.match(r"^\s*\w", toks[li])
                         q = True
                         break
                     li -= 1
                 if not q: continue
                 p = 0; b = 0; q = False
                 while ri < nt:
-                    if toks[ri] == ")":
+                    tr = toks[ri].strip()
+                    if tr == ")":
                         p -= 1
-                    elif toks[ri] == "(":
+                    elif tr == "(":
                         p += 1
-                    elif toks[ri] == "]":
+                    elif tr == "]":
                         b -= 1
-                    elif toks[ri] == "[":
+                    elif tr == "[":
                         b += 1
-                    elif p == 0 and b == 0 and re.match(r"^\s*\w", toks[ri]):
+                    elif p == 0 and b == 0 and toks[ri].strip() != "": # and re.match(r"^\s*\w", toks[ri]):
                         q = True
                         break
                     ri += 1
@@ -693,5 +698,6 @@ MUTATIONS = [
     RemoveParens(),
     IntroParens(),
     SwapParens(),
-    SwapAdjacentLines()
+    SwapAdjacentLines(),
+    SwapOperatorArgs()
 ]

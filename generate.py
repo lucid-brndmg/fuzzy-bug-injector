@@ -112,21 +112,21 @@ def main():
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
     parser.add_argument("--lang", type=str, default="", help="Specified language if omitted in dataset")
     
-    parser.add_argument("--sampler-module", type=str, default="", help="A sampler module (.py file)")
+    parser.add_argument("--sampler-mod", type=str, default="", help="A sampler module (.py file)")
     parser.add_argument(
-        "--mutation-modules",
-        nargs="*",
-        default=[DEFAULT_MUTATION_MODULE],
+        "--mut-mod",
+        action="append",
+        default=[],
         help="Mutation modules to load (directory or .py file)",
     )
     parser.add_argument(
-        "--mutations",
-        nargs="*",
+        "--mut",
+        action="append",
         default=[],
         help="Mutation names to include (e.g. delete-statement)",
     )
     parser.add_argument(
-        "--mutation-list",
+        "--mut-list",
         help="A list file containing mutation names to include (split by spaces or lines)",
     )
     args = parser.parse_args()
@@ -134,7 +134,7 @@ def main():
         random.seed(args.seed)
     
     mutation_inst = []
-    for path in args.mutation_modules:
+    for path in args.mut_mod:
         loaded = []
         for mod in load_path(Path(path)):
             try:
@@ -147,9 +147,9 @@ def main():
         print(f"loaded {len(loaded)} mutations from {str(path)}")
         mutation_inst += loaded
 
-    mut_whitelist = args.mutations
-    if args.mutation_list is not None and args.mutation_list != "":
-        file = Path(args.mutation_list)
+    mut_whitelist = args.mut
+    if args.mut_list is not None and args.mut_list != "":
+        file = Path(args.mut_list)
         content = []
         if file.name.endswith(".json"):
             content = json.loads(file.read_text())
@@ -165,8 +165,8 @@ def main():
         print(f"\t- {m.name}")
 
     sampler = default_sampler
-    if args.sampler_module is not None and args.sampler_module != "":
-        sampler = load_module(args.sampler_module).sampler
+    if args.sampler_mod is not None and args.sampler_mod != "":
+        sampler = load_module(args.sampler_mod).sampler
 
     dataset = json.loads(Path(args.dataset).read_text())
     print(f"total {len(dataset)} items loaded from dataset")
