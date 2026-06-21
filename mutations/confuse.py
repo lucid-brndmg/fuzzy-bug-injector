@@ -627,7 +627,6 @@ class SwapOperatorArgs(Mutation):
             indent = len(line) - len(line.lstrip())
             toks = simple_tokenize_by(ptn, stripped)
             toks = [ x for t in toks for x in ([t] if re.match(ptn, t) else simple_tokenize_by(GENERAL_SYMBOL_PATTERN, t)) ]
-            print(toks)
             nt = len(toks)
             for j, tok in enumerate(toks):
                 if tok not in self.OPS:
