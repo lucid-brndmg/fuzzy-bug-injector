@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
+import random
+from typing import Any, Generator
 
-from common.utils import is_disjoint_intervals
+from common.utils import is_disjoint_intervals, iter_disjoint_subsets
 
 @dataclass
 class MutationMatch:
@@ -28,7 +30,7 @@ class MutationMatch:
                     return False
         return True
 
-    def json_digest(self):
+    def to_json_digest(self):
         return {
             "line_number": self.line_number,
             "original": self.original,
@@ -37,6 +39,9 @@ class MutationMatch:
             "end_line": self.end_line if self.end_line is not None else self.line_number,
             "extra_sites": self.extra_sites
         }
+
+def json_digest_to_mutation_match(digest: dict) -> MutationMatch:
+    return MutationMatch(digest["line_number"], digest["original"], digest["mutated"], digest["indent"], digest["end_line"], digest["extra_sites"])
 
 def apply_mutations(lines: list[str], muts: list[MutationMatch]) -> list[str]:
     # muts must be disjoint
@@ -83,3 +88,23 @@ class Mutation:
 
     def describe(self, match: MutationMatch) -> str:
         return self.description_template.format(original=match.original.strip(), mutated=match.mutated.strip())
+
+
+def default_mutation_sampler(
+    candidates: list[tuple[str, MutationMatch]],
+    min_mut: int,
+    max_mut: int,
+) -> Generator[list[tuple[str, MutationMatch]], Any, None]:
+    def check_disjoint(a, b):
+        (_name1, mat1) = a
+        (_name2, mat2) = b
+        return mat1.is_disjoint(mat2)
+    random.shuffle(candidates)
+    ps = iter_disjoint_subsets(candidates, check_disjoint, min_mut, max_mut, 2**32)
+    # 2**24 would be a reasonable range
+    if len(candidates) <= 24:
+        subsets = list(ps)
+        random.shuffle(subsets)
+        yield from subsets
+    else:
+        yield from ps
